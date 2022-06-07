@@ -1,7 +1,7 @@
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}
 };
 use std::{error::Error, io};
 use tui::{
@@ -14,13 +14,15 @@ use tui_input::backend::crossterm as input_backend;
 use tui_input::Input;
 
 struct State {
-    input: Input
+    input: Input,
+    log: String
 }
 
 impl State {
     fn init() -> State {
         State {
-            input: Input::default()
+            input: Input::default(),
+            log: String::new()
         }
     }
 }
@@ -52,11 +54,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, state: &mut State) -> io::Result<()> {
     loop {
-        terminal.draw(|f| ui(f, &state))?;
+        terminal.draw(|f| ui(f, state))?;
 
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Enter => {
+                    state.log.push_str(state.input.value());
+                    state.log.push_str("\n");
                     state.input.reset();
                 }
                 _ => {
@@ -67,7 +71,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, state: &mut State) -> io::Res
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, state: &State) {
+fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
     let chunks_h = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
@@ -87,13 +91,21 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &State) {
     let width = chunks[0].width.max(3) - 3;
     let scroll = (state.input.cursor() as u16).max(width) - width;
 
-    let channels_block = Block::default().title("Channels").borders(Borders::ALL);
-    f.render_widget(channels_block, chunks_h[1]);
+    let height = chunks[0].height.max(3) - 3;
+    let scroll_log = (state.log.matches("\n").count() as u16).max(height) - height;
 
-    let logs_block = Block::default().title("Logs").borders(Borders::ALL);
-    f.render_widget(logs_block, chunks[0]);
+    let channels = Block::default().title("Channels").borders(Borders::ALL);
+    f.render_widget(channels, chunks_h[1]);
+
+    let logs = Paragraph::new(state.log.clone()).scroll((scroll_log, 0)).block(Block::default().borders(Borders::ALL));
+    f.render_widget(logs.clone(), chunks[0]);
 
     let input = Paragraph::new(state.input.value()).scroll((0, scroll)).block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[1]);
+
+    f.set_cursor(
+        chunks[1].x + (state.input.cursor() as u16).min(width) + 1,
+        chunks[1].y + 1,
+    );
 }
 
